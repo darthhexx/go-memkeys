@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"regexp"
 	"runtime/pprof"
@@ -70,8 +72,10 @@ var (
 	statsSecond      bool
 	statsWriteToFile bool
 
-	iface = flag.String("i", "en0", "Interface to read packets from")
-	port  = flag.Int("p", 11211, "Port number")
+	myIP4v, myIPv6 string
+
+	nic  = flag.String("i", "en0", "Interface to read packets from")
+	port = flag.Int("p", 11211, "Port number")
 )
 
 func main() {
@@ -84,12 +88,12 @@ func main() {
 	mCachedItems = make(map[string]*CachedItem)
 	statsWriteToFile = false
 
-	payloadResponse = regexp.MustCompile("VALUE (\\S+) \\d+ (\\d+)")
+	payloadResponse = regexp.MustCompile("^VALUE (\\S+) \\d+ (\\d+)")
 	if nil == payloadResponse {
 		log.Fatalf("Unable to compile the packet memcached response regex")
 	}
 
-	payloadRequest = regexp.MustCompile("get (\\S+)")
+	payloadRequest = regexp.MustCompile("^get (\\S+)\\r?\\n$")
 	if nil == payloadRequest {
 		log.Fatalf("Unable to compile the packet memcached get regex")
 	}
@@ -107,9 +111,16 @@ func main() {
 
 	pprof.StartCPUProfile(f)
 
+	/*
+		myIP4v, myIPv6, err = getInterfaceAddresses(*nic)
+		if nil != err {
+			log.Fatalf("Unable to determine interace %s's addresses: %s\n", *nic, err.Error())
+		}
+	*/
+
 	bpffilter := fmt.Sprintf("port %d", *port)
 
-	inactive, err := pcap.NewInactiveHandle(*iface)
+	inactive, err := pcap.NewInactiveHandle(*nic)
 	if err != nil {
 		log.Fatalf("could not create: %v", err)
 	}
@@ -145,107 +156,17 @@ func main() {
 
 	g.Mouse = false
 	g.Cursor = false
-	//g.InputEsc = false
 	g.SetManagerFunc(layout)
 
-	if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.SetKeybinding("", 'q', gocui.ModNone, quit); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.SetKeybinding("", 'Q', gocui.ModNone, quit); err != nil {
-		log.Panicln(err)
-	}
-
-	g.SetKeybinding("", 'b', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		if SortBandwidth != columnSortBy {
-			columnSortBy = SortBandwidth
-			paintStatus(g)
-		}
-		return nil
-	})
-	g.SetKeybinding("", 'B', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		if SortBandwidth != columnSortBy {
-			columnSortBy = SortBandwidth
-			paintStatus(g)
-		}
-		return nil
-	})
-	g.SetKeybinding("", 'r', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		if SortReq != columnSortBy {
-			columnSortBy = SortReq
-			paintStatus(g)
-		}
-		return nil
-	})
-	g.SetKeybinding("", 'R', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		if SortReqPerSec != columnSortBy {
-			columnSortBy = SortReqPerSec
-			paintStatus(g)
-		}
-		return nil
-	})
-	g.SetKeybinding("", 'e', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		if SortResp != columnSortBy {
-			columnSortBy = SortResp
-			paintStatus(g)
-		}
-		return nil
-	})
-	g.SetKeybinding("", 'E', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		if SortRespPerSec != columnSortBy {
-			columnSortBy = SortRespPerSec
-			paintStatus(g)
-		}
-		return nil
-	})
-	g.SetKeybinding("", 's', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		if SortSize != columnSortBy {
-			columnSortBy = SortSize
-			paintStatus(g)
-		}
-		return nil
-	})
-	g.SetKeybinding("", 'S', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		if SortSize != columnSortBy {
-			columnSortBy = SortSize
-			paintStatus(g)
-		}
-		return nil
-	})
-	g.SetKeybinding("", 't', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		if SortTypeAscending == columnSortType {
-			columnSortType = SortTypeDescending
-		} else {
-			columnSortType = SortTypeAscending
-		}
-		paintStatus(g)
-		return nil
-	})
-	g.SetKeybinding("", 'T', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		if SortTypeAscending == columnSortType {
-			columnSortType = SortTypeDescending
-		} else {
-			columnSortType = SortTypeAscending
-		}
-		paintStatus(g)
-		return nil
-	})
-	g.SetKeybinding("", 'd', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		statsWriteToFile = !statsWriteToFile
-		paintStatus(g)
-		return nil
-	})
-	g.SetKeybinding("", 'D', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		statsWriteToFile = !statsWriteToFile
-		paintStatus(g)
-		return nil
-	})
+	setUpKeyEvents(g)
 
 	for i := 0; i < NumGoroutines; i++ {
 		go Run(g, handle)
 	}
+
+	paintHeader(g)
+	paintData(g)
+	paintStatus(g)
 
 	go func() {
 		halfSecChan := time.Tick(time.Duration(500 * time.Millisecond.Nanoseconds()))
@@ -264,16 +185,14 @@ func main() {
 				return
 			case <-halfSecChan:
 				g.Update(func(g *gocui.Gui) error {
-					err := paintHeader(g)
+					err = paintHeader(g)
 					if err != nil {
 						return err
 					}
-
 					err = paintData(g)
 					if err != nil {
 						return err
 					}
-
 					err = paintStatus(g)
 					if err != nil {
 						return err
@@ -332,7 +251,7 @@ func paintData(g *gocui.Gui) error {
 
 	sortedData := sortByColumn()
 	_, maxY := g.Size()
-	rowCount := 3 // 1 for the header and 2 for status bar
+	rowCount := 5 // 1 for the header + it's line separator and 2 for status bar and it's line separator
 
 	for _, v := range sortedData {
 		fmt.Fprintln(k, v.Key)
@@ -364,6 +283,7 @@ func paintData(g *gocui.Gui) error {
 			fmt.Fprintln(bw, "      -")
 		}
 
+		rowCount++
 		if rowCount >= maxY {
 			break
 		}
@@ -478,7 +398,7 @@ func paintHeader(g *gocui.Gui) error {
 	v.Clear()
 	v.BgColor = gocui.ColorBlue
 	v.FgColor = gocui.ColorWhite
-	fmt.Fprintln(v, "   kbps")
+	fmt.Fprintln(v, "  bw(kbps)")
 
 	return nil
 }
@@ -523,7 +443,7 @@ func paintStatus(g *gocui.Gui) error {
 	}
 
 	fmt.Fprintln(v, status)
-	fmt.Fprintln(v, "B: sort by bandwidth | r: sort by requests | R: sort by req/sec | r: sort by response | R: sort by resp/sec  | Q: quit | S: sort by size | T: toggle sort order")
+	fmt.Fprintln(v, "b: sort by bandwidth | r: sort by requests | R: sort by req/sec | e: sort by response | E: sort by resp/sec  | q: quit | s: sort by size | t: toggle sort order")
 	return nil
 }
 
@@ -578,6 +498,72 @@ func layout(g *gocui.Gui) error {
 	return nil
 }
 
+func setUpKeyEvents(g *gocui.Gui) {
+	if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
+		log.Panicln(err)
+	}
+	if err := g.SetKeybinding("", 'q', gocui.ModNone, quit); err != nil {
+		log.Panicln(err)
+	}
+
+	g.SetKeybinding("", 'b', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		if SortBandwidth != columnSortBy {
+			columnSortBy = SortBandwidth
+			paintStatus(g)
+		}
+		return nil
+	})
+	g.SetKeybinding("", 'r', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		if SortReq != columnSortBy {
+			columnSortBy = SortReq
+			paintStatus(g)
+		}
+		return nil
+	})
+	g.SetKeybinding("", 'R', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		if SortReqPerSec != columnSortBy {
+			columnSortBy = SortReqPerSec
+			paintStatus(g)
+		}
+		return nil
+	})
+	g.SetKeybinding("", 'e', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		if SortResp != columnSortBy {
+			columnSortBy = SortResp
+			paintStatus(g)
+		}
+		return nil
+	})
+	g.SetKeybinding("", 'E', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		if SortRespPerSec != columnSortBy {
+			columnSortBy = SortRespPerSec
+			paintStatus(g)
+		}
+		return nil
+	})
+	g.SetKeybinding("", 's', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		if SortSize != columnSortBy {
+			columnSortBy = SortSize
+			paintStatus(g)
+		}
+		return nil
+	})
+	g.SetKeybinding("", 't', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		if SortTypeAscending == columnSortType {
+			columnSortType = SortTypeDescending
+		} else {
+			columnSortType = SortTypeAscending
+		}
+		paintStatus(g)
+		return nil
+	})
+	g.SetKeybinding("", 'd', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		statsWriteToFile = !statsWriteToFile
+		paintStatus(g)
+		return nil
+	})
+}
+
 func quit(g *gocui.Gui, v *gocui.View) error {
 	pprof.StopCPUProfile()
 
@@ -612,6 +598,28 @@ func quit(g *gocui.Gui, v *gocui.View) error {
 	return gocui.ErrQuit
 }
 
+func getInterfaceAddresses(nic string) (string, string, error) {
+	iface, err := net.InterfaceByName(nic)
+	if nil != err {
+		return "", "", err
+	}
+
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return "", "", err
+	}
+
+	if 0 == len(addrs) {
+		return "", "", errors.New("No addresses configured on the interface")
+	}
+
+	for k, addr := range addrs {
+		fmt.Printf("Interface Address #%v : %v : %v\n", k, addr.String(), addr.Network())
+	}
+
+	return "", "", err
+}
+
 func Run(g *gocui.Gui, src gopacket.PacketDataSource) {
 	var dec gopacket.Decoder
 	var ok bool
@@ -624,12 +632,42 @@ func Run(g *gocui.Gui, src gopacket.PacketDataSource) {
 	source.NoCopy = true
 	source.DecodeStreamsAsDatagrams = true
 
+	var data string
 	for packet := range source.Packets() {
-		if 60 > len(packet.Data()) {
+		// "get \S{1}" == 73, so nothing smaller than this is worth processing
+		if 73 > len(packet.Data()) {
 			continue
 		}
 
-		matches := payloadResponse.FindStringSubmatch(string(packet.Data()))
+		layer := packet.Layer(44) // LayerTypeTCP
+		if nil == layer || 5 > len(layer.LayerPayload()) {
+			continue
+		}
+
+		data = string(layer.LayerPayload())
+
+		matches := payloadRequest.FindStringSubmatch(data)
+		if 2 == len(matches) {
+			mCachedItemsPadlock.Lock()
+			_, exists := mCachedItems[matches[1]]
+			mCachedItemsPadlock.Unlock()
+			if !exists {
+				nr := CachedItem{}
+				nr.Size = -1
+				nr.RequestCount = 1
+				nr.ResponseCount = 0
+				mCachedItemsPadlock.Lock()
+				mCachedItems[matches[1]] = &nr
+				mCachedItemsPadlock.Unlock()
+			} else {
+				mCachedItemsPadlock.Lock()
+				mCachedItems[matches[1]].RequestCount++
+				mCachedItemsPadlock.Unlock()
+			}
+			continue
+		}
+
+		matches = payloadResponse.FindStringSubmatch(data)
 		if 3 == len(matches) {
 			size, err := strconv.ParseFloat(matches[2], 32)
 			if nil != err {
@@ -654,27 +692,5 @@ func Run(g *gocui.Gui, src gopacket.PacketDataSource) {
 			}
 			continue
 		}
-
-		matches = payloadRequest.FindStringSubmatch(string(packet.Data()))
-		if 2 == len(matches) {
-			mCachedItemsPadlock.Lock()
-			_, exists := mCachedItems[matches[1]]
-			mCachedItemsPadlock.Unlock()
-			if !exists {
-				nr := CachedItem{}
-				nr.Size = -1
-				nr.RequestCount = 1
-				nr.ResponseCount = 0
-				mCachedItemsPadlock.Lock()
-				mCachedItems[matches[1]] = &nr
-				mCachedItemsPadlock.Unlock()
-			} else {
-				mCachedItemsPadlock.Lock()
-				mCachedItems[matches[1]].RequestCount++
-				mCachedItemsPadlock.Unlock()
-			}
-			continue
-		}
-
 	}
 }
