@@ -6,7 +6,7 @@ Memcached top-like cache key monitoring utility inspired by the mctop/memkeys pr
 
 ## Installation
 
-Follow the simple golang process steps of `get`, `build`, and run :)
+Follow the simple golang process steps of `get`, `build`, and run. The application also relies on the pcap library, so ensure that is installed on your OS before you perform the next steps.
 
 ```bash
 > git clone https://github.com/darthhexx/go-memkeys
