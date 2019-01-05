@@ -11,6 +11,8 @@ Follow the simple golang process steps of `get`, `build`, and run :)
 ```bash
 > git clone https://github.com/darthhexx/go-memkeys
 
+> cd go-memkeys
+
 > go get
 
 > go build
@@ -27,3 +29,7 @@ Usage of go-memkeys:
   -p int
     	Port number (default 11211)
 ```
+
+## Export data in JSON format
+
+In order to export all the data recorded by the application; press 'd' (dump) during execution. A file will be saved as `{timestamp}-stats.json` in the applcation's directory, assuming the user has the required directory ACLs.
