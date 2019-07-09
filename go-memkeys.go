@@ -161,7 +161,7 @@ func main() {
 	setUpKeyEvents(g)
 
 	for i := 0; i < NumGoroutines; i++ {
-		go Run(g, handle)
+		go Run(handle)
 	}
 
 	paintHeader(g)
@@ -620,7 +620,7 @@ func getInterfaceAddresses(nic string) (string, string, error) {
 	return "", "", err
 }
 
-func Run(g *gocui.Gui, src gopacket.PacketDataSource) {
+func Run(src gopacket.PacketDataSource) {
 	var dec gopacket.Decoder
 	var ok bool
 
