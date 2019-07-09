@@ -74,16 +74,19 @@ var (
 
 	myIP4v, myIPv6 string
 
-	nic  = flag.String("i", "en0", "Interface to read packets from")
-	port = flag.Int("p", 11211, "Port number")
+	nic        = flag.String("i", "en0", "Interface to read packets from")
+	port       = flag.Int("p", 11211, "Port number")
+	sortByFlag = flag.String("sortby", "bandwidth", "Column to sort the data on; defaults to bandwidth")
+	orderFlag  = flag.String("order", "desc", "Whether to sort in (desc)ending or (asc)ending order; defaults to 'desc'")
+	pollOutput = flag.Int("polloutput", 0, "Capture data, write to JSON output, and exit after 'polloutput' seconds")
+	limitRows  = flag.Int("limitrows", 5000, "Limits the number of records output to JSON. Is only used in conjunction with 'polloutput'")
+	cpuProfile = flag.Bool("profile", false, "Output cpu profile data to a 'cpu-profile' file")
 )
 
 func main() {
 	var handle *pcap.Handle
 	var err error
 
-	columnSortBy = SortBandwidth
-	columnSortType = SortTypeDescending
 	mCachedItemsPadlock = &sync.Mutex{}
 	mCachedItems = make(map[string]*CachedItem)
 	statsWriteToFile = false
@@ -104,12 +107,37 @@ func main() {
 		log.Fatalf("Please speicify a listen ort between 1024 and 65536")
 	}
 
-	f, err := os.Create("cpu-profile")
-	if err != nil {
-		log.Fatalln("could not open cpu profile file")
+	switch *sortByFlag {
+	case "req":
+		columnSortBy = SortReq
+	case "reqps":
+		columnSortBy = SortReqPerSec
+	case "res":
+		columnSortBy = SortResp
+	case "resps":
+		columnSortBy = SortRespPerSec
+	case "size":
+		columnSortBy = SortSize
+	case "bandwidth":
+		fallthrough
+	default:
+		columnSortBy = SortBandwidth
 	}
 
-	pprof.StartCPUProfile(f)
+	if "asc" == *orderFlag {
+		columnSortType = SortTypeAscending
+	} else {
+		columnSortType = SortTypeDescending
+	}
+
+	if *cpuProfile {
+		f, err := os.Create("cpu-profile")
+		if err != nil {
+			log.Fatalln("could not open cpu profile file")
+		}
+
+		pprof.StartCPUProfile(f)
+	}
 
 	/*
 		myIP4v, myIPv6, err = getInterfaceAddresses(*nic)
@@ -565,7 +593,9 @@ func setUpKeyEvents(g *gocui.Gui) {
 }
 
 func quit(g *gocui.Gui, v *gocui.View) error {
-	pprof.StopCPUProfile()
+	if *cpuProfile {
+		pprof.StopCPUProfile()
+	}
 
 	if statsWriteToFile {
 		log.Println("saving stats to disk...")
