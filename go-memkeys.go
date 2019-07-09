@@ -180,7 +180,6 @@ func main() {
 		bpffilter += " and ( " + strings.Join(flag.Args(), " ") + " )"
 	}
 
-	fmt.Fprintf(os.Stderr, "Using BPF filter %q\n", bpffilter)
 	if err = handle.SetBPFFilter(bpffilter); err != nil {
 		log.Fatal("BPF filter error:", err)
 	}
