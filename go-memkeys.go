@@ -93,7 +93,7 @@ func main() {
 		log.Fatalf("Unable to compile the packet memcached response regex")
 	}
 
-	payloadRequest = regexp.MustCompile("^get (\\S+)\\r?\\n$")
+	payloadRequest = regexp.MustCompile("^get (\\S+)\\r?\\n")
 	if nil == payloadRequest {
 		log.Fatalf("Unable to compile the packet memcached get regex")
 	}
