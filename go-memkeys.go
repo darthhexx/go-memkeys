@@ -23,9 +23,10 @@ import (
 )
 
 const (
-	NumGoroutines = 4
-	ColumnWidth   = 12
-	SNAP_LENGTH   = 65536
+	NumGoroutines          = 4
+	ColumnWidth            = 12
+	SNAP_LENGTH            = 65536
+	MAX_POLLOUTPUT_SECONDS = 120
 
 	SortReq = iota
 	SortReqPerSec
@@ -87,7 +88,7 @@ var (
 	port       = flag.Int("p", 11211, "Port number")
 	sortByFlag = flag.String("sortby", "bandwidth", "Column to sort the data on; defaults to bandwidth")
 	orderFlag  = flag.String("order", "desc", "Whether to sort in (desc)ending or (asc)ending order; defaults to 'desc'")
-	pollOutput = flag.Int("polloutput", 0, "Capture data, write to JSON output, and exit after 'polloutput' seconds")
+	pollOutput = flag.Int("polloutput", 0, fmt.Sprintf("Capture data, write to JSON output, and exit after 'polloutput' seconds (max is %d seconds)", MAX_POLLOUTPUT_SECONDS))
 	limitRows  = flag.Int("limitrows", 5000, "Limits the number of records output to JSON. Is only used in conjunction with 'polloutput'")
 	cpuProfile = flag.Bool("profile", false, "Output cpu profile data to a 'cpu-profile' file")
 )
@@ -190,7 +191,13 @@ func main() {
 			go Run(handle)
 		}
 
+		// Prevent large poll times
+		if MAX_POLLOUTPUT_SECONDS < *pollOutput {
+			*pollOutput = MAX_POLLOUTPUT_SECONDS
+		}
 		exitChan := time.Tick(time.Duration(int64(*pollOutput) * time.Second.Nanoseconds()))
+
+		// Request|Response per calculation second ticker
 		statsChan := time.Tick(time.Duration(1 * time.Second.Nanoseconds()))
 
 		for {
