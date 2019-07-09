@@ -46,6 +46,15 @@ type CachedItem struct {
 	ResponsesPerSecond float32 `json:"resPerSec"`
 }
 
+type CachedOutputItem struct {
+	Key                string  `json:"key"`
+	Size               float32 `json:"size"`
+	RequestCount       float32 `json:"reqCount"`
+	RequestsPerSecond  float32 `json:"reqPerSec"`
+	ResponseCount      float32 `json:"resCount"`
+	ResponsesPerSecond float32 `json:"resPerSec"`
+}
+
 type SortObject struct {
 	Key   string
 	Value float32
@@ -176,7 +185,36 @@ func main() {
 		log.Fatal("BPF filter error:", err)
 	}
 
-	g, err := gocui.NewGui(gocui.OutputNormal)
+	if 0 < *pollOutput {
+		// Distinct execution loop for pollOutput
+		for i := 0; i < NumGoroutines; i++ {
+			go Run(handle)
+		}
+
+		exitChan := time.Tick(time.Duration(int64(*pollOutput) * time.Second.Nanoseconds()))
+		statsChan := time.Tick(time.Duration(1 * time.Second.Nanoseconds()))
+
+		for {
+			select {
+			case <-statsChan:
+				statsTimer++
+				mCachedItemsPadlock.Lock()
+				for _, v := range mCachedItems {
+					v.RequestsPerSecond = v.RequestCount / statsTimer
+					v.ResponsesPerSecond = v.ResponseCount / statsTimer
+				}
+				mCachedItemsPadlock.Unlock()
+			case <-exitChan:
+				outputStatsToStdout()
+				return // exit's here
+			}
+		}
+		return // moot exit
+	}
+
+	var g *gocui.Gui
+
+	g, err = gocui.NewGui(gocui.OutputNormal)
 	if err != nil {
 		log.Panicln(err)
 	}
@@ -626,6 +664,49 @@ func quit(g *gocui.Gui, v *gocui.View) error {
 		}
 	}
 	return gocui.ErrQuit
+}
+
+func outputStatsToStdout() {
+	var stats []byte
+	var err error
+
+	sortedData := sortByColumn()
+
+	if 0 < *limitRows {
+		rowCount := 0
+		if len(mCachedItems) < *limitRows {
+			*limitRows = len(mCachedItems)
+		}
+		limitedData := make([]CachedOutputItem, *limitRows)
+		for _, v := range sortedData {
+			mCachedItemsPadlock.Lock()
+			item, found := mCachedItems[v.Key]
+			mCachedItemsPadlock.Unlock()
+			if found {
+				limitedData[rowCount] = CachedOutputItem{
+					Key:                v.Key,
+					Size:               item.Size,
+					RequestCount:       item.RequestCount,
+					RequestsPerSecond:  item.RequestsPerSecond,
+					ResponseCount:      item.ResponseCount,
+					ResponsesPerSecond: item.ResponsesPerSecond,
+				}
+			}
+			rowCount++
+			if rowCount >= *limitRows {
+				break
+			}
+		}
+		stats, err = json.Marshal(limitedData)
+	} else {
+		stats, err = json.Marshal(sortedData)
+	}
+
+	if nil != err {
+		log.Fatalf("error parsing the stats map: %s\n", err.Error())
+	}
+
+	fmt.Fprintf(os.Stdout, string(stats))
 }
 
 func getInterfaceAddresses(nic string) (string, string, error) {
