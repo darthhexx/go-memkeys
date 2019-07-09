@@ -84,13 +84,13 @@ var (
 
 	myIP4v, myIPv6 string
 
-	nic        = flag.String("i", "en0", "Interface to read packets from")
-	port       = flag.Int("p", 11211, "Port number")
-	sortByFlag = flag.String("sortby", "bandwidth", "Column to sort the data on; defaults to bandwidth")
-	orderFlag  = flag.String("order", "desc", "Whether to sort in (desc)ending or (asc)ending order; defaults to 'desc'")
+	nic        = flag.String("i", "en0", "Interface to read packets from.")
+	port       = flag.Int("p", 11211, "Port number.")
+	sortByFlag = flag.String("sortby", "bandwidth", "Column to sort the data on.")
+	orderFlag  = flag.String("order", "desc", "Whether to sort in (desc)ending or (asc)ending order.")
 	pollOutput = flag.Int("polloutput", 0, fmt.Sprintf("Capture data, write to JSON output, and exit after 'polloutput' seconds (max is %d seconds)", MAX_POLLOUTPUT_SECONDS))
-	limitRows  = flag.Int("limitrows", 5000, "Limits the number of records output to JSON. Is only used in conjunction with 'polloutput'")
-	cpuProfile = flag.Bool("profile", false, "Output cpu profile data to a 'cpu-profile' file")
+	limitRows  = flag.Int("limitrows", 5000, "Limits the number of records output to JSON. This is only used in conjunction with 'polloutput'.")
+	cpuProfile = flag.Bool("profile", false, "Output cpu profile data to a 'cpu-profile' file.")
 )
 
 func main() {
