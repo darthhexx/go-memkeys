@@ -114,7 +114,7 @@ func main() {
 	flag.Parse()
 
 	if nil == port || 1024 > *port || 65536 < *port {
-		log.Fatalf("Please speicify a listen ort between 1024 and 65536")
+		log.Fatalf("Please specify a listen port between 1024 and 65536")
 	}
 
 	switch *sortByFlag {
